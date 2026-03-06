@@ -1,5 +1,6 @@
 import { db } from '@/db';
 import { attendance, devices } from '@/db/schema';
+import { toZonedTime } from 'date-fns-tz';
 import { desc, eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
@@ -61,8 +62,9 @@ export async function POST(request: Request) {
             });
         }
 
+        const timeZone = 'America/Lima';
         const targetBssid = bssid || 'Desconocido';
-        const targetTimestamp = timestamp ? new Date(timestamp) : new Date();
+        const targetTimestamp = timestamp ? toZonedTime(new Date(timestamp), timeZone) : toZonedTime(new Date(), timeZone);
 
         // 2. Insert into attendance
         const result = await db.insert(attendance).values({

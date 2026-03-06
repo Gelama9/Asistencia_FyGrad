@@ -1,4 +1,5 @@
 import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 import { db } from '@/db';
 import { attendance, devices, attendanceOverrides, lateFeeRules, employeeMonthlySummaries, schedules } from '@/db/schema';
 import { eq, and, gte, lte, sql } from 'drizzle-orm';
@@ -65,20 +66,13 @@ async function ensureRules() {
   }
 }
 
-// Helper to get Lima Time
 function getLimaTime(date: Date) {
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Lima',
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false
-  });
-  const parts = formatter.formatToParts(date);
-  const map: Record<string, string> = {};
-  parts.forEach(p => map[p.type] = p.value);
+  const timeZone = 'America/Lima';
+  const zonedDate = toZonedTime(date, timeZone);
+  
   return {
-    hour: parseInt(map.hour || '0'),
-    minute: parseInt(map.minute || '0')
+    hour: zonedDate.getHours(),
+    minute: zonedDate.getMinutes()
   };
 }
 
@@ -171,12 +165,7 @@ export async function getMonthlyData(date: Date): Promise<UserSummary[]> {
       const displayName = rec.display_name || 'Desconocido';
       const timestamp = new Date(rec.timestamp);
       
-      const dateKey = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'America/Lima',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).format(timestamp);
+      const dateKey = format(timestamp, 'yyyy-MM-dd'); // Now safe with TZ="America/Lima"
 
       if (!userMap[userId]) {
         // Fallback for any userId that might exist in attendance but not in devices (shouldn't happen given the join above, but stay safe)
@@ -265,12 +254,7 @@ export async function getMonthlyData(date: Date): Promise<UserSummary[]> {
     });
 
     const now = new Date();
-    const todayKey = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Lima',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(now);
+    const todayKey = format(now, 'yyyy-MM-dd');
     const limaNow = getLimaTime(now);
 
     Object.values(userMap).forEach(user => {
