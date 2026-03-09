@@ -1,6 +1,7 @@
 import AttendanceReport from '@/components/AttendanceReport';
 import { db } from '@/db';
 import { attendance, devices as devicesTable } from '@/db/schema';
+import { formatInTimeZone } from 'date-fns-tz';
 import { desc, eq } from 'drizzle-orm';
 
 interface RawAttendanceRecord {
@@ -56,7 +57,7 @@ function getLimaInfo(date: Date) {
     day: parseInt(map.day),
     hour: parseInt(map.hour),
     minute: parseInt(map.minute),
-    dateKey: `${map.year}-${map.month}-${map.day}`
+    dateKey: formatInTimeZone(date, 'America/Lima', 'yyyy-MM-dd')
   };
 }
 

@@ -1,5 +1,5 @@
 import { format, startOfMonth, endOfMonth } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
+import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
 import { db } from '@/db';
 import { attendance, devices, attendanceOverrides, lateFeeRules, employeeMonthlySummaries, schedules } from '@/db/schema';
 import { eq, and, gte, lte, sql } from 'drizzle-orm';
@@ -165,7 +165,7 @@ export async function getMonthlyData(date: Date): Promise<UserSummary[]> {
       const displayName = rec.display_name || 'Desconocido';
       const timestamp = new Date(rec.timestamp);
       
-      const dateKey = format(timestamp, 'yyyy-MM-dd'); // Now safe with TZ="America/Lima"
+      const dateKey = formatInTimeZone(timestamp, 'America/Lima', 'yyyy-MM-dd');
 
       if (!userMap[userId]) {
         // Fallback for any userId that might exist in attendance but not in devices (shouldn't happen given the join above, but stay safe)
@@ -254,7 +254,7 @@ export async function getMonthlyData(date: Date): Promise<UserSummary[]> {
     });
 
     const now = new Date();
-    const todayKey = format(now, 'yyyy-MM-dd');
+    const todayKey = formatInTimeZone(now, 'America/Lima', 'yyyy-MM-dd');
     const limaNow = getLimaTime(now);
 
     Object.values(userMap).forEach(user => {
@@ -328,7 +328,7 @@ export async function getMonthlyData(date: Date): Promise<UserSummary[]> {
 }
 
 export async function getPayrollSummary(date: Date): Promise<PayrollEmployeeSummary[]> {
-  const monthKey = format(date, 'yyyy-MM');
+  const monthKey = formatInTimeZone(date, 'America/Lima', 'yyyy-MM');
   
   // Reuse monthly data calculation to get discounts and worked blocks
   const monthlyData = await getMonthlyData(date);

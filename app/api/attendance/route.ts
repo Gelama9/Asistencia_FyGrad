@@ -62,9 +62,8 @@ export async function POST(request: Request) {
             });
         }
 
-        const timeZone = 'America/Lima';
         const targetBssid = bssid || 'Desconocido';
-        const targetTimestamp = timestamp ? toZonedTime(new Date(timestamp), timeZone) : toZonedTime(new Date(), timeZone);
+        const targetTimestamp = timestamp ? new Date(timestamp) : new Date();
 
         // 2. Insert into attendance
         const result = await db.insert(attendance).values({
