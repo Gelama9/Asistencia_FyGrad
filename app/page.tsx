@@ -148,9 +148,9 @@ async function getData(): Promise<{ dayGroups: DayGroup[]; devices: Device[] }> 
               const h = lima.hour;
               const m = lima.minute;
               // Morning: Late if after 9:00 AM and before 1:00 PM (13:00)
-              if (h < 13 && (h > 9 || (h === 9 && m > 0))) isLateMorning = true;
+              if (h < 14 && (h > 9 || (h === 9 && m > 0))) isLateMorning = true;
               // Afternoon: Late if after 3:00 PM (15:00)
-              if (h >= 13 && (h > 15 || (h === 15 && m > 0))) isLateAfternoon = true;
+              if (h >= 14 && (h > 15 || (h === 15 && m > 0))) isLateAfternoon = true;
             }
 
             // Only sum duration if both bounds exist

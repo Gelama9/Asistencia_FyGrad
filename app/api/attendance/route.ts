@@ -28,7 +28,7 @@ export async function GET(request: Request) {
         const dateKey = formatInTimeZone(now, 'America/Lima', 'yyyy-MM-dd');
         const hour = limaNow.getHours();
 
-        // 1. Check for overrides for today
+        // 1. Check for overrides for today (Lima dateKey)
         const overrides = await db.select()
             .from(attendanceOverrides)
             .where(and(
@@ -36,44 +36,42 @@ export async function GET(request: Request) {
                 eq(attendanceOverrides.dateKey, dateKey)
             ));
 
-        // 2. Fetch latest raw records for today
-        const todayStart = new Date(now);
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date(now);
-        todayEnd.setHours(23, 59, 59, 999);
-
-        const lastRecords = await db.select()
+        // 2. Fetch records for the device (History: last 10)
+        const allRecords = await db.select()
             .from(attendance)
-            .where(and(
-                eq(attendance.deviceId, deviceId),
-                gte(attendance.timestamp, todayStart),
-                lte(attendance.timestamp, todayEnd)
-            ))
+            .where(eq(attendance.deviceId, deviceId))
             .orderBy(desc(attendance.timestamp))
-            .limit(1);
+            .limit(10);
+
+        // Calculate "Today" in Lima for state logic
+        const startOfLimaDay = new Date(limaNow);
+        startOfLimaDay.setHours(0, 0, 0, 0);
+        const endOfLimaDay = new Date(limaNow);
+        endOfLimaDay.setHours(23, 59, 59, 999);
+
+        // Filter lastRecords for today's state
+        const lastRecordsToday = allRecords.filter(r => {
+            const rLima = toZonedTime(r.timestamp, 'America/Lima');
+            return rLima >= startOfLimaDay && rLima <= endOfLimaDay;
+        });
 
         let isCheckedIn = false;
         let suggestedAction: 'ENTRADA' | 'SALIDA' = 'ENTRADA';
 
         // Logic to determine status
-        // Prioritize afternoon block if it's late, otherwise morning
-        const blockType = hour >= 13 ? 'afternoon' : 'morning';
+        const blockType = hour >= 14 ? 'afternoon' : 'morning';
         const ov = overrides.find(o => o.blockType === blockType) || overrides.find(o => o.blockType === (blockType === 'morning' ? 'afternoon' : 'morning'));
 
         if (ov) {
-            // If there's an override, follow its state
             if (ov.inTime && !ov.outTime) {
                 isCheckedIn = true;
                 suggestedAction = 'SALIDA';
-            } else if (ov.inTime && ov.outTime) {
-                isCheckedIn = false;
-                suggestedAction = 'ENTRADA';
-            } else if (ov.status === 'Inasistencia') {
+            } else {
                 isCheckedIn = false;
                 suggestedAction = 'ENTRADA';
             }
-        } else if (lastRecords.length > 0) {
-            const last = lastRecords[0];
+        } else if (lastRecordsToday.length > 0) {
+            const last = lastRecordsToday[0];
             if (last.action === 'ENTRADA') {
                 isCheckedIn = true;
                 suggestedAction = 'SALIDA';
@@ -87,7 +85,8 @@ export async function GET(request: Request) {
             success: true, 
             isCheckedIn, 
             suggestedAction,
-            lastAction: lastRecords[0]?.action || null
+            lastAction: lastRecordsToday[0]?.action || null,
+            records: allRecords 
         }, { status: 200, headers: corsHeaders });
     } catch (error) {
         console.error('Error fetching attendance history:', error);
@@ -107,6 +106,7 @@ export async function POST(request: Request) {
 
         // 1. Fetch current status (re-using GET logic for consistency)
         const now = new Date();
+        const limaNow = toZonedTime(now, 'America/Lima');
         const dateKey = formatInTimeZone(now, 'America/Lima', 'yyyy-MM-dd');
         
         // Check for duplicates in the last 60 seconds
@@ -124,7 +124,9 @@ export async function POST(request: Request) {
             return NextResponse.json({ 
                 success: true, 
                 message: 'Registro duplicado ignorado (dentro de 60s)',
-                record: duplicateCheck[0] 
+                record: duplicateCheck[0],
+                isCheckedIn: duplicateCheck[0].action === 'ENTRADA',
+                suggestedAction: duplicateCheck[0].action === 'ENTRADA' ? 'SALIDA' : 'ENTRADA'
             }, { status: 200, headers: corsHeaders });
         }
 
@@ -136,13 +138,18 @@ export async function POST(request: Request) {
                 eq(attendanceOverrides.dateKey, dateKey)
             ));
 
-        const todayStart = new Date(now);
-        todayStart.setHours(0, 0, 0, 0);
+        // Use Lima boundaries for today's state
+        const startOfLimaDay = new Date(limaNow);
+        startOfLimaDay.setHours(0, 0, 0, 0);
+        const endOfLimaDay = new Date(limaNow);
+        endOfLimaDay.setHours(23, 59, 59, 999);
+
         const lastRecords = await db.select()
             .from(attendance)
             .where(and(
                 eq(attendance.deviceId, deviceId),
-                gte(attendance.timestamp, todayStart)
+                gte(attendance.timestamp, startOfLimaDay),
+                lte(attendance.timestamp, endOfLimaDay)
             ))
             .orderBy(desc(attendance.timestamp))
             .limit(1);
@@ -150,9 +157,8 @@ export async function POST(request: Request) {
         let isCheckedIn = false;
         let suggestedAction: 'ENTRADA' | 'SALIDA' = 'ENTRADA';
 
-        const limaNow = toZonedTime(now, 'America/Lima');
         const hour = limaNow.getHours();
-        const blockType = hour >= 13 ? 'afternoon' : 'morning';
+        const blockType = hour >= 14 ? 'afternoon' : 'morning';
         const ov = overrides.find(o => o.blockType === blockType) || overrides.find(o => o.blockType === (blockType === 'morning' ? 'afternoon' : 'morning'));
 
         if (ov) {

@@ -1,5 +1,5 @@
 import { format, startOfMonth, endOfMonth } from 'date-fns';
-import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
+import { toZonedTime, formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 import { db } from '@/db';
 import { attendance, devices, attendanceOverrides, lateFeeRules, employeeMonthlySummaries, schedules } from '@/db/schema';
 import { eq, and, gte, lte, sql } from 'drizzle-orm';
@@ -103,15 +103,14 @@ function calculateLateFee(isoString: string | null, blockType: 'morning' | 'afte
 export async function getMonthlyData(date: Date): Promise<UserSummary[]> {
   await ensureRules();
   
-  const start = startOfMonth(date);
-  const end = endOfMonth(date);
+  // Boundaries in Lima timezone
+  const start = fromZonedTime(format(startOfMonth(date), 'yyyy-MM-dd 00:00:00'), 'America/Lima');
+  const end = fromZonedTime(format(endOfMonth(date), 'yyyy-MM-dd 23:59:59.999'), 'America/Lima');
 
   try {
-    // 1. Fetch ALL registered devices (collaborators)
     const allDevices = await db.select().from(devices);
     const userMap: { [userId: string]: UserSummary } = {};
     
-    // Initialize userMap with all devices that have a display name
     allDevices.forEach(dev => {
       if (!dev.displayName || dev.displayName.trim() === '') return;
       userMap[dev.deviceId] = {
@@ -142,17 +141,11 @@ export async function getMonthlyData(date: Date): Promise<UserSummary[]> {
       bssid: attendance.bssid,
       timestamp: attendance.timestamp,
       device_id: attendance.deviceId,
-      salary_per_block: devices.salaryPerBlock,
     })
     .from(attendance)
     .innerJoin(devices, eq(attendance.deviceId, devices.deviceId))
-    .where(and(
-      gte(attendance.timestamp, start),
-      lte(attendance.timestamp, end)
-    ))
+    .where(and(gte(attendance.timestamp, start), lte(attendance.timestamp, end)))
     .orderBy(attendance.timestamp);
-
-    const rawRecords = attendanceRecords as any[];
 
     const overrides = await db.select()
       .from(attendanceOverrides)
@@ -161,81 +154,51 @@ export async function getMonthlyData(date: Date): Promise<UserSummary[]> {
         lte(attendanceOverrides.dateKey, format(end, 'yyyy-MM-dd'))
       ));
 
-    rawRecords.forEach((rec) => {
+    const rules = await db.select().from(lateFeeRules);
+
+    // 1. Process Logs into userMap
+    attendanceRecords.forEach((rec) => {
       const userId = rec.user_id;
-      const displayName = rec.display_name || 'Desconocido';
-      const timestamp = new Date(rec.timestamp);
-      
-      const dateKey = formatInTimeZone(timestamp, 'America/Lima', 'yyyy-MM-dd');
+      if (!userId) return; // Null check for DB field
 
-      if (!userMap[userId]) {
-        // Skip records for users not in the valid userMap (e.g. no displayName or deleted)
-        return;
-      }
+      const t = rec.timestamp;
+      const dateKey = formatInTimeZone(t, 'America/Lima', 'yyyy-MM-dd');
+      const lima = getLimaTime(t);
+      const h = lima.hour;
+      const m = lima.minute;
 
+      if (!userMap[userId]) return;
       if (!userMap[userId].days[dateKey]) {
         userMap[userId].days[dateKey] = {
-          morning: null,
-          afternoon: null,
-          isLateMorning: false,
-          isLateAfternoon: false
+          morning: null, afternoon: null, isLateMorning: false, isLateAfternoon: false
         };
       }
 
       const dayData = userMap[userId].days[dateKey];
-      const lima = getLimaTime(timestamp);
-      const h = lima.hour;
-      const m = lima.minute;
-
+      const type: 'morning' | 'afternoon' = h < 14 ? 'morning' : 'afternoon';
+      
       if (rec.action === 'ENTRADA') {
-        if (h < 13) {
-          if (!dayData.morning) {
-            dayData.morning = { in: timestamp.toISOString(), out: null };
+        if (!dayData[type]) {
+          dayData[type] = { in: t.toISOString(), out: null };
+          if (type === 'morning') {
             if (h > 9 || (h === 9 && m > 0)) dayData.isLateMorning = true;
-          }
-        } else {
-          if (!dayData.afternoon) {
-            dayData.afternoon = { in: timestamp.toISOString(), out: null };
+          } else {
             if (h > 15 || (h === 15 && m > 0)) dayData.isLateAfternoon = true;
           }
         }
       } else if (rec.action === 'SALIDA') {
-        if (h < 13) {
-          if (dayData.morning) dayData.morning.out = timestamp.toISOString();
-        } else {
-          if (dayData.afternoon) dayData.afternoon.out = timestamp.toISOString();
-        }
+        if (dayData[type]) dayData[type]!.out = t.toISOString();
       }
     });
 
-    // Apply Overrides and Auto-Calculated Fees
-    overrides.forEach(ov => {
-      if (!userMap[ov.userId]) {
-        // Skip overrides for users not in the valid userMap
-        return;
-      }
-      if (!userMap[ov.userId].days[ov.dateKey]) {
-        userMap[ov.userId].days[ov.dateKey] = {
-          morning: null,
-          afternoon: null,
-          isLateMorning: false,
-          isLateAfternoon: false
-        };
-      }
-    });
-
-    const rules = await db.select().from(lateFeeRules);
-
-    // 2. Create a lookup map for overrides
+    // 2. lookup map for overrides
     const overrideMap: Record<string, any> = {};
     overrides.forEach(ov => {
-      const key = `${ov.userId}-${ov.dateKey}-${ov.blockType}`;
-      overrideMap[key] = ov;
+      overrideMap[`${ov.userId}-${ov.dateKey}-${ov.blockType}`] = ov;
     });
 
-    // 3. Process each day for each user
-    const daysInMonth = Array.from({ length: end.getDate() }, (_, i) => {
-      const d = new Date(start);
+    const daysInMonth = Array.from({ length: endOfMonth(date).getDate() }, (_, i) => {
+      const d = new Date(startOfMonth(date));
       d.setDate(i + 1);
       return format(d, 'yyyy-MM-dd');
     });
@@ -247,61 +210,42 @@ export async function getMonthlyData(date: Date): Promise<UserSummary[]> {
     Object.values(userMap).forEach(user => {
       daysInMonth.forEach(dateKey => {
         const dayDate = new Date(dateKey + 'T12:00:00Z');
-        const dayOfWeek = dayDate.getUTCDay(); // 0-6
-
-        // Check if user is scheduled for this day
-        const daySchedules = user.schedules.filter(s => s.dayOfWeek === dayOfWeek);
+        const dayOfWeek = dayDate.getUTCDay();
         
-        daySchedules.forEach(sched => {
-          const type = sched.blockType;
-          const key = `${user.userId}-${dateKey}-${type}`;
-          const ov = overrideMap[key];
-          
-          if (!user.days[dateKey]) {
-            user.days[dateKey] = {
-              morning: null,
-              afternoon: null,
-              isLateMorning: false,
-              isLateAfternoon: false
-            };
-          }
-          const dayData = user.days[dateKey];
+        if (!user.days[dateKey]) {
+          user.days[dateKey] = { morning: null, afternoon: null, isLateMorning: false, isLateAfternoon: false };
+        }
+        const dayData = user.days[dateKey];
+
+        // Process both blocks
+        (['morning', 'afternoon'] as const).forEach(type => {
+          const ovKey = `${user.userId}-${dateKey}-${type}`;
+          const ov = overrideMap[ovKey];
+          const isScheduled = user.schedules.some(s => s.dayOfWeek === dayOfWeek && s.blockType === type);
 
           if (ov) {
             if (!dayData[type]) dayData[type] = { in: null, out: null };
             if (ov.inTime) {
               dayData[type]!.in = ov.inTime.toISOString();
-              // Recalculate late flag
-              const lima = getLimaTime(ov.inTime);
-              const startHour = type === 'morning' ? 9 : 15;
-              if (type === 'morning') {
-                dayData.isLateMorning = (lima.hour > startHour || (lima.hour === startHour && lima.minute > 0));
-              } else {
-                dayData.isLateAfternoon = (lima.hour > startHour || (lima.hour === startHour && lima.minute > 0));
-              }
+              const l = getLimaTime(ov.inTime);
+              const startH = type === 'morning' ? 9 : 15;
+              const isLate = l.hour > startH || (l.hour === startH && l.minute > 0);
+              if (type === 'morning') dayData.isLateMorning = isLate; else dayData.isLateAfternoon = isLate;
             }
             if (ov.outTime) dayData[type]!.out = ov.outTime.toISOString();
             dayData[type]!.status = ov.status;
             dayData[type]!.notes = ov.notes;
             dayData[type]!.payment = user.salaryPerBlock - parseFloat(ov.paymentAmount || '0');
           } else if (dayData[type]) {
-            // Already has attendance, calculate fee
+            // Unscheduled or Scheduled attendance
             const fee = calculateLateFee(dayData[type]!.in, type, rules, user.salaryPerBlock);
             dayData[type]!.payment = user.salaryPerBlock - fee;
-          } else {
+            if (!isScheduled) dayData[type]!.notes = (dayData[type]!.notes || '') + ' [Extra]';
+          } else if (isScheduled) {
             // Missing scheduled block
-            // Only mark as Inasistencia if the date is in the past OR today and the block start time has passed
-            let isPast = dateKey < todayKey;
-            let isTodayPassed = false;
-            
-            if (dateKey === todayKey) {
-              const startHour = type === 'morning' ? 9 : 15;
-              if (limaNow.hour >= startHour + 1) { // Wait 1 hour after start to mark as absence if no show
-                isTodayPassed = true;
-              }
-            }
-
-            if (isPast || isTodayPassed) {
+            const startH = type === 'morning' ? 9 : 15;
+            const isPast = dateKey < todayKey || (dateKey === todayKey && limaNow.hour >= startH + 1);
+            if (isPast) {
               dayData[type] = { in: null, out: null, status: 'Inasistencia', payment: 0 };
             }
           }
@@ -309,14 +253,10 @@ export async function getMonthlyData(date: Date): Promise<UserSummary[]> {
       });
     });
 
-    // Calculate total payments per user
+    // Final total calculation
     Object.values(userMap).forEach(user => {
-      let total = 0;
-      Object.values(user.days).forEach(day => {
-        if (day.morning?.payment !== undefined) total += day.morning.payment;
-        if (day.afternoon?.payment !== undefined) total += day.afternoon.payment;
-      });
-      user.totalPayment = total;
+      user.totalPayment = Object.values(user.days).reduce((acc, d) => 
+        acc + (d.morning?.payment || 0) + (d.afternoon?.payment || 0), 0);
     });
 
     return Object.values(userMap);

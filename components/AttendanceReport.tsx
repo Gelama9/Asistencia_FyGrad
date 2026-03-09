@@ -68,17 +68,17 @@ export default function AttendanceReport({ dayGroups }: AttendanceReportProps) {
         if (!currentGroup) return;
 
         let csvContent = "data:text/csv;charset=utf-8,";
-        csvContent += "Colaborador,ID,Entrada AM,Almuerzo,Regreso PM,Salida,Estado,Tiempo Total (Horas)\n";
+        csvContent += "Colaborador,ID,Entrada AM,Almuerzo,Regreso PM,Salida PM,Estado,Tiempo Total (Horas)\n";
 
         filteredUsers.forEach(user => {
             const morning = user.sessions.find(s => {
                 const t = s.in || s.out;
-                return t && getLimaHour(t) < 13;
+                return t && getLimaHour(t) < 14;
             }) || { in: null, out: null };
 
             const afternoon = user.sessions.find(s => {
                 const t = s.in || s.out;
-                return t && getLimaHour(t) >= 13;
+                return t && getLimaHour(t) >= 14;
             }) || { in: null, out: null };
 
             const inMorning = morning.in ? new Date(morning.in).toLocaleTimeString('es-PE', { timeZone: 'America/Lima', hour12: false }) : 'N/A';
@@ -193,16 +193,16 @@ export default function AttendanceReport({ dayGroups }: AttendanceReportProps) {
                         {filteredUsers.map((user) => {
                             const morning = user.sessions.find(s => {
                                 const t = s.in || s.out;
-                                return t && getLimaHour(t) < 13;
+                                return t && getLimaHour(t) < 14;
                             }) || { in: null, out: null };
 
                             const afternoon = user.sessions.find(s => {
                                 const t = s.in || s.out;
-                                return t && getLimaHour(t) >= 13;
+                                return t && getLimaHour(t) >= 14;
                             }) || { in: null, out: null };
 
                             return (
-                                <div key={user.userId} className="group p-6 md:p-8 flex flex-col md:grid md:grid-cols-6 items-center gap-6 md:gap-8 hover:bg-slate-50/50 transition-colors relative">
+                                <div key={user.userId} className="group p-6 md:p-8 flex flex-col md:grid md:grid-cols-5 items-center gap-6 md:gap-8 hover:bg-slate-50/50 transition-colors relative">
                                     {/* User Info */}
                                     <div className="col-span-1 flex items-center w-full">
                                         <div className="h-14 w-14 md:h-12 md:w-12 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center text-white text-sm md:text-xs font-black mr-4 ring-4 ring-white shadow-lg shadow-slate-200/50 shrink-0">
@@ -215,7 +215,7 @@ export default function AttendanceReport({ dayGroups }: AttendanceReportProps) {
                                     </div>
 
                                     {/* Time Slots Grid for Mobile / Columns for Desktop */}
-                                    <div className="col-span-3 w-full grid grid-cols-2 md:contents gap-4">
+                                    <div className="col-span-4 w-full grid grid-cols-2 md:contents gap-4">
                                         <div className="md:col-span-1 text-center bg-slate-50 md:bg-slate-50/50 py-4 md:py-3 rounded-2xl border border-slate-100/50">
                                             <p className="text-[9px] md:text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Entrada AM</p>
                                             <div className="flex justify-center items-baseline gap-1">
@@ -230,33 +230,21 @@ export default function AttendanceReport({ dayGroups }: AttendanceReportProps) {
                                             </div>
                                         </div>
 
-                                        <div className="md:col-span-1 text-center bg-slate-50 md:bg-slate-50/50 py-4 md:py-3 rounded-2xl border border-slate-100/50 col-span-2 md:col-span-1">
+                                        <div className="md:col-span-1 text-center bg-slate-50 md:bg-slate-50/50 py-4 md:py-3 rounded-2xl border border-slate-100/50">
                                             <p className="text-[9px] md:text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Regreso PM</p>
                                             <div className="flex justify-center items-baseline gap-1">
                                                 <span className={`text-sm md:text-[13px] font-black ${user.isLateAfternoon ? 'text-rose-500' : 'text-slate-900'}`}>{formatLimaTime(afternoon.in)}</span>
                                             </div>
                                         </div>
-                                    </div>
 
-                                    {/* Status and Total */}
-                                    <div className="col-span-1 flex flex-row md:flex-col items-center justify-between md:justify-center w-full gap-4">
-                                        {(user.isLateMorning || user.isLateAfternoon) ? (
-                                            <span className="bg-rose-50 text-rose-600 ring-1 ring-rose-500/10 text-[10px] md:text-[8px] font-black px-4 py-1.5 md:px-3 md:py-1 rounded-full uppercase tracking-tighter shadow-sm shadow-rose-100/50 shrink-0">Tardanza</span>
-                                        ) : (
-                                            <span className="bg-emerald-50 text-emerald-600 ring-1 ring-emerald-500/10 text-[10px] md:text-[8px] font-black px-4 py-1.5 md:px-3 md:py-1 rounded-full uppercase tracking-tighter shadow-sm shadow-emerald-100/50 shrink-0">Puntual</span>
-                                        )}
-                                        <p className="text-xl md:text-[16px] font-black text-slate-900 tracking-tighter">
-                                            {Math.floor(user.totalMs / 3600000)}h {Math.floor((user.totalMs % 3600000) / 60000)}m
-                                        </p>
-                                    </div>
-
-                                    {/* Progress Bar */}
-                                    <div className="col-span-1 w-full text-right">
-                                        <div className="h-2.5 md:h-2 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner mb-2">
-                                            <div className="h-full bg-indigo-500 rounded-full shadow-[0_0_10px_rgba(99,102,241,0.5)] transition-all duration-1000" style={{ width: `${Math.min(100, (user.totalMs / (8 * 3600000)) * 100)}%` }}></div>
+                                        <div className="md:col-span-1 text-center bg-slate-50 md:bg-slate-50/50 py-4 md:py-3 rounded-2xl border border-slate-100/50">
+                                            <p className="text-[9px] md:text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Salida PM</p>
+                                            <div className="flex justify-center items-baseline gap-1">
+                                                <span className="text-sm md:text-[13px] font-black text-slate-900">{formatLimaTime(afternoon.out)}</span>
+                                            </div>
                                         </div>
-                                        <span className="text-[10px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest block">{Math.round((user.totalMs / (8 * 3600000)) * 100)}% Jornada</span>
                                     </div>
+
                                 </div>
                             );
                         })}
