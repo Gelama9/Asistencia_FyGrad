@@ -14,6 +14,8 @@ interface StatusModalProps {
   initialStatus?: string;
   initialNotes?: string;
   initialPayment?: number;
+  initialIn?: string | null;
+  initialOut?: string | null;
 }
 
 export default function StatusModal({
@@ -25,11 +27,29 @@ export default function StatusModal({
   blockType,
   initialStatus = 'Ninguno',
   initialNotes = '',
-  initialPayment = 0
+  initialPayment = 0,
+  initialIn = null,
+  initialOut = null
 }: StatusModalProps) {
+  const formatForInput = (iso: string | null) => {
+    if (!iso) return '';
+    try {
+      return new Intl.DateTimeFormat('en-GB', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: false,
+        timeZone: 'America/Lima' 
+      }).format(new Date(iso));
+    } catch (e) {
+      return '';
+    }
+  };
+
   const [status, setStatus] = useState(initialStatus);
   const [notes, setNotes] = useState(initialNotes);
   const [payment, setPayment] = useState(initialPayment.toString());
+  const [inTime, setInTime] = useState(formatForInput(initialIn));
+  const [outTime, setOutTime] = useState(formatForInput(initialOut));
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,6 +67,14 @@ export default function StatusModal({
     formData.append('status', status);
     formData.append('notes', notes);
     formData.append('paymentAmount', payment);
+    
+    // Create ISO strings for the times
+    if (inTime) {
+      formData.append('inTime', `${dateKey}T${inTime}:00`);
+    }
+    if (outTime) {
+      formData.append('outTime', `${dateKey}T${outTime}:00`);
+    }
 
     const result = await saveStatusOverride(formData);
     
@@ -114,6 +142,28 @@ export default function StatusModal({
                     {opt.label}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Time Overrides */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hora de Entrada</label>
+                <input
+                  type="time"
+                  value={inTime}
+                  onChange={(e) => setInTime(e.target.value)}
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-black text-slate-900 focus:outline-none focus:border-slate-900 transition-colors"
+                />
+              </div>
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hora de Salida</label>
+                <input
+                  type="time"
+                  value={outTime}
+                  onChange={(e) => setOutTime(e.target.value)}
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-black text-slate-900 focus:outline-none focus:border-slate-900 transition-colors"
+                />
               </div>
             </div>
 

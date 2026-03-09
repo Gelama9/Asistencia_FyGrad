@@ -24,6 +24,8 @@ export const attendanceOverrides = pgTable('attendance_overrides', {
   status: text('status'),
   notes: text('notes'),
   paymentAmount: decimal('payment_amount', { precision: 10, scale: 2 }).default('0.00'),
+  inTime: timestamp('in_time'),
+  outTime: timestamp('out_time'),
   updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
   userDateBlockUnique: unique().on(table.userId, table.dateKey, table.blockType),

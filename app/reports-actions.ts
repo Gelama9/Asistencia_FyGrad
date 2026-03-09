@@ -12,8 +12,13 @@ export async function saveStatusOverride(formData: FormData) {
   const status = formData.get('status') as string;
   const notes = formData.get('notes') as string;
   const paymentAmount = formData.get('paymentAmount') as string || '0';
+  const inTimeStr = formData.get('inTime') as string;
+  const outTimeStr = formData.get('outTime') as string;
 
   if (!userId || !dateKey || !blockType) return { error: 'Missing data' };
+
+  const inTime = inTimeStr ? new Date(inTimeStr) : null;
+  const outTime = outTimeStr ? new Date(outTimeStr) : null;
 
   try {
     await db.insert(attendanceOverrides).values({
@@ -23,6 +28,8 @@ export async function saveStatusOverride(formData: FormData) {
       status,
       notes,
       paymentAmount: paymentAmount,
+      inTime,
+      outTime,
       updatedAt: new Date(),
     }).onConflictDoUpdate({
       target: [attendanceOverrides.userId, attendanceOverrides.dateKey, attendanceOverrides.blockType],
@@ -30,6 +37,8 @@ export async function saveStatusOverride(formData: FormData) {
         status,
         notes,
         paymentAmount: paymentAmount,
+        inTime,
+        outTime,
         updatedAt: new Date(),
       }
     });

@@ -269,6 +269,18 @@ export async function getMonthlyData(date: Date): Promise<UserSummary[]> {
 
           if (ov) {
             if (!dayData[type]) dayData[type] = { in: null, out: null };
+            if (ov.inTime) {
+              dayData[type]!.in = ov.inTime.toISOString();
+              // Recalculate late flag
+              const lima = getLimaTime(ov.inTime);
+              const startHour = type === 'morning' ? 9 : 15;
+              if (type === 'morning') {
+                dayData.isLateMorning = (lima.hour > startHour || (lima.hour === startHour && lima.minute > 0));
+              } else {
+                dayData.isLateAfternoon = (lima.hour > startHour || (lima.hour === startHour && lima.minute > 0));
+              }
+            }
+            if (ov.outTime) dayData[type]!.out = ov.outTime.toISOString();
             dayData[type]!.status = ov.status;
             dayData[type]!.notes = ov.notes;
             dayData[type]!.payment = user.salaryPerBlock - parseFloat(ov.paymentAmount || '0');

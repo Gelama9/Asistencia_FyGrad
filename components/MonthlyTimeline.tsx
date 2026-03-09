@@ -62,7 +62,9 @@ export default function MonthlyTimeline({ initialRecords, currentDate: initialDa
     type: 'morning' | 'afternoon',
     initialStatus?: string,
     initialNotes?: string,
-    initialDiscount?: number
+    initialDiscount?: number,
+    initialIn?: string | null,
+    initialOut?: string | null
   } | null>(null);
 
   const monthStart = startOfMonth(viewDate);
@@ -225,7 +227,9 @@ export default function MonthlyTimeline({ initialRecords, currentDate: initialDa
                               type: 'morning',
                               initialStatus: dayData?.morning?.status,
                               initialNotes: dayData?.morning?.notes,
-                              initialDiscount: 46 - (dayData?.morning?.payment ?? 46)
+                              initialDiscount: 46 - (dayData?.morning?.payment ?? 46),
+                              initialIn: dayData?.morning?.in,
+                              initialOut: dayData?.morning?.out
                             })}
                             className={`flex-1 rounded-lg transition-all cursor-pointer relative group/cell border
                               ${getStatusColor(dayData?.morning || null, dayData?.isLateMorning || false)}
@@ -268,7 +272,9 @@ export default function MonthlyTimeline({ initialRecords, currentDate: initialDa
                               type: 'afternoon',
                               initialStatus: dayData?.afternoon?.status,
                               initialNotes: dayData?.afternoon?.notes,
-                              initialDiscount: 46 - (dayData?.afternoon?.payment ?? 46)
+                              initialDiscount: 46 - (dayData?.afternoon?.payment ?? 46),
+                              initialIn: dayData?.afternoon?.in,
+                              initialOut: dayData?.afternoon?.out
                             })}
                             className={`flex-1 rounded-lg transition-all cursor-pointer relative group/cell border
                               ${getStatusColor(dayData?.afternoon || null, dayData?.isLateAfternoon || false)}
@@ -349,6 +355,8 @@ export default function MonthlyTimeline({ initialRecords, currentDate: initialDa
           initialStatus={selectedCell.initialStatus}
           initialNotes={selectedCell.initialNotes}
           initialPayment={selectedCell.initialDiscount}
+          initialIn={selectedCell.initialIn}
+          initialOut={selectedCell.initialOut}
         />
       )}
 
