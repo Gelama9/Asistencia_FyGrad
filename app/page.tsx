@@ -79,7 +79,7 @@ async function getData(): Promise<{ dayGroups: DayGroup[]; devices: Device[] }> 
       timestamp: attendance.timestamp,
     })
     .from(attendance)
-    .leftJoin(devicesTable, eq(attendance.deviceId, devicesTable.deviceId))
+    .innerJoin(devicesTable, eq(attendance.deviceId, devicesTable.deviceId))
     .orderBy(desc(attendance.timestamp))
     .limit(2000);
 
@@ -110,7 +110,7 @@ async function getData(): Promise<{ dayGroups: DayGroup[]; devices: Device[] }> 
 
         const usersInDay = Object.keys(groups[dateKey]).map((userId) => {
           const userRecs = groups[dateKey][userId].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-          const displayName = userRecs[0].display_name || 'Desconocido';
+          const displayName = userRecs[0].display_name!; // Now guaranteed by innerJoin and non-null filter if applied
 
           const sessions: { in: string | null; out: string | null }[] = [];
           let current: { in: string | null; out: string | null } | null = null;

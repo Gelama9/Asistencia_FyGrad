@@ -111,11 +111,12 @@ export async function getMonthlyData(date: Date): Promise<UserSummary[]> {
     const allDevices = await db.select().from(devices);
     const userMap: { [userId: string]: UserSummary } = {};
     
-    // Initialize userMap with all devices
+    // Initialize userMap with all devices that have a display name
     allDevices.forEach(dev => {
+      if (!dev.displayName || dev.displayName.trim() === '') return;
       userMap[dev.deviceId] = {
         userId: dev.deviceId,
-        displayName: dev.displayName || 'Desconocido',
+        displayName: dev.displayName,
         salaryPerBlock: parseFloat(dev.salaryPerBlock || '46.00'),
         days: {},
         totalPayment: 0,
@@ -144,7 +145,7 @@ export async function getMonthlyData(date: Date): Promise<UserSummary[]> {
       salary_per_block: devices.salaryPerBlock,
     })
     .from(attendance)
-    .leftJoin(devices, eq(attendance.deviceId, devices.deviceId))
+    .innerJoin(devices, eq(attendance.deviceId, devices.deviceId))
     .where(and(
       gte(attendance.timestamp, start),
       lte(attendance.timestamp, end)
@@ -168,15 +169,8 @@ export async function getMonthlyData(date: Date): Promise<UserSummary[]> {
       const dateKey = formatInTimeZone(timestamp, 'America/Lima', 'yyyy-MM-dd');
 
       if (!userMap[userId]) {
-        // Fallback for any userId that might exist in attendance but not in devices (shouldn't happen given the join above, but stay safe)
-        userMap[userId] = { 
-          userId, 
-          displayName, 
-          salaryPerBlock: parseFloat(rec.salary_per_block || '46.00'),
-          days: {}, 
-          totalPayment: 0,
-          schedules: []
-        };
+        // Skip records for users not in the valid userMap (e.g. no displayName or deleted)
+        return;
       }
 
       if (!userMap[userId].days[dateKey]) {
@@ -217,15 +211,8 @@ export async function getMonthlyData(date: Date): Promise<UserSummary[]> {
     // Apply Overrides and Auto-Calculated Fees
     overrides.forEach(ov => {
       if (!userMap[ov.userId]) {
-        // We might not have attendance for this user, so we need to fetch their info
-        userMap[ov.userId] = { 
-          userId: ov.userId, 
-          displayName: 'Desconocido', 
-          salaryPerBlock: 46.00, // Default if not found in loop above
-          days: {}, 
-          totalPayment: 0,
-          schedules: []
-        };
+        // Skip overrides for users not in the valid userMap
+        return;
       }
       if (!userMap[ov.userId].days[ov.dateKey]) {
         userMap[ov.userId].days[ov.dateKey] = {
